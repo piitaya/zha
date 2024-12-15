@@ -10,6 +10,8 @@ import zoneinfo
 
 from freezegun import freeze_time
 import pytest
+import zhaquirks.legrand
+import zhaquirks.legrand.cable_outlet
 import zhaquirks.sinope.thermostat
 from zhaquirks.sinope.thermostat import SinopeTechnologiesThermostatCluster
 import zhaquirks.tuya.ts0601_trv
@@ -38,12 +40,13 @@ from zha.application.const import (
     PRESET_TEMP_MANUAL,
 )
 from zha.application.gateway import Gateway
+from zha.application.platforms import PlatformEntity
 from zha.application.platforms.climate import (
     HVAC_MODE_2_SYSTEM,
     SEQ_OF_OPERATION,
     Thermostat as ThermostatEntity,
 )
-from zha.application.platforms.climate.const import FanState
+from zha.application.platforms.climate.const import ATTR_HVAC_MODE, FanState
 from zha.application.platforms.sensor import (
     Sensor,
     SinopeHVACAction,
@@ -166,11 +169,25 @@ CLIMATE_ZONNSMART = {
     }
 }
 
+LEGRAND_CABLE_OUTLET = {
+    1: {
+        SIG_EP_PROFILE: zigpy.profiles.zha.PROFILE_ID,
+        SIG_EP_TYPE: zigpy.profiles.zha.DeviceType.LEVEL_CONTROL_SWITCH,
+        SIG_EP_INPUT: [
+            64513,
+            zigpy.zcl.clusters.general.Basic.cluster_id,
+            64576,
+        ],
+        SIG_EP_OUTPUT: [zigpy.zcl.clusters.general.Ota.cluster_id],
+    }
+}
+
 MANUF_SINOPE = "Sinope Technologies"
 MANUF_ZEN = "Zen Within"
 MANUF_MOES = "_TZE200_ckud7u2l"
 MANUF_BECA = "_TZE200_b6wax7g0"
 MANUF_ZONNSMART = "_TZE200_hue3yfsn"
+MANUF_LEGRAND = " Legrand"
 
 ZCL_ATTR_PLUG = {
     "abs_min_heat_setpoint_limit": 800,
@@ -1463,3 +1480,187 @@ async def test_set_zonnsmart_operation_mode(zha_gateway: Gateway) -> None:
     await send_attributes_report(zha_gateway, thrm_cluster, {"operation_preset": 4})
 
     assert entity.state[ATTR_PRESET_MODE] == "frost protect"
+
+
+async def test_set_legrand_preset(zha_gateway: Gateway) -> None:
+    """Test setting preset from homeassistant for zonnsmart trv."""
+    zigpy_device = create_mock_zigpy_device(
+        zha_gateway,
+        LEGRAND_CABLE_OUTLET,
+        manufacturer=" Legrand",
+        model=" Cable outlet",
+    )
+    device_legrand_cable_outlet_legrand = await join_zigpy_device(
+        zha_gateway, zigpy_device
+    )
+    cable_outlet_cluster = device_legrand_cable_outlet_legrand.device.endpoints[
+        1
+    ].legrand_cable_outlet_cluster
+
+    entity: PlatformEntity = get_entity(
+        device_legrand_cable_outlet_legrand,
+        platform=Platform.CLIMATE,
+    )
+
+    assert entity.state[ATTR_PRESET_MODE] is None
+
+    await entity.async_set_preset_mode("comfort")
+    await zha_gateway.async_block_till_done()
+
+    assert cable_outlet_cluster.write_attributes.await_count == 1
+    assert cable_outlet_cluster.write_attributes.call_args_list[0][0][0] == {
+        "pilot_wire_mode": 0
+    }
+
+    cable_outlet_cluster.write_attributes.reset_mock()
+
+    await entity.async_set_preset_mode("comfort_minus_1")
+    await zha_gateway.async_block_till_done()
+
+    assert cable_outlet_cluster.write_attributes.await_count == 1
+    assert cable_outlet_cluster.write_attributes.call_args_list[0][0][0] == {
+        "pilot_wire_mode": 1
+    }
+
+    cable_outlet_cluster.write_attributes.reset_mock()
+
+    await entity.async_set_preset_mode("comfort_minus_2")
+    await zha_gateway.async_block_till_done()
+
+    assert cable_outlet_cluster.write_attributes.await_count == 1
+    assert cable_outlet_cluster.write_attributes.call_args_list[0][0][0] == {
+        "pilot_wire_mode": 2
+    }
+
+    cable_outlet_cluster.write_attributes.reset_mock()
+
+    await entity.async_set_preset_mode("eco")
+    await zha_gateway.async_block_till_done()
+
+    assert cable_outlet_cluster.write_attributes.await_count == 1
+    assert cable_outlet_cluster.write_attributes.call_args_list[0][0][0] == {
+        "pilot_wire_mode": 3
+    }
+
+    cable_outlet_cluster.write_attributes.reset_mock()
+
+    await entity.async_set_preset_mode("frost_protection")
+    await zha_gateway.async_block_till_done()
+
+    assert cable_outlet_cluster.write_attributes.await_count == 1
+    assert cable_outlet_cluster.write_attributes.call_args_list[0][0][0] == {
+        "pilot_wire_mode": 4
+    }
+
+    cable_outlet_cluster.write_attributes.reset_mock()
+
+    await entity.async_set_preset_mode("none")
+    await zha_gateway.async_block_till_done()
+
+    assert cable_outlet_cluster.write_attributes.await_count == 1
+    assert cable_outlet_cluster.write_attributes.call_args_list[0][0][0] == {
+        "pilot_wire_mode": 5
+    }
+
+    cable_outlet_cluster.write_attributes.reset_mock()
+
+
+async def test_set_legrand_hvac_mode(zha_gateway: Gateway) -> None:
+    """Test setting preset from homeassistant for zonnsmart trv."""
+    zigpy_device = create_mock_zigpy_device(
+        zha_gateway,
+        LEGRAND_CABLE_OUTLET,
+        manufacturer=" Legrand",
+        model=" Cable outlet",
+    )
+    device_legrand_cable_outlet_legrand = await join_zigpy_device(
+        zha_gateway, zigpy_device
+    )
+    cable_outlet_cluster = device_legrand_cable_outlet_legrand.device.endpoints[
+        1
+    ].legrand_cable_outlet_cluster
+
+    entity: PlatformEntity = get_entity(
+        device_legrand_cable_outlet_legrand,
+        platform=Platform.CLIMATE,
+    )
+
+    assert entity.state[ATTR_HVAC_MODE] is None
+
+    await entity.async_set_hvac_mode("heat")
+    await zha_gateway.async_block_till_done()
+
+    assert cable_outlet_cluster.write_attributes.await_count == 1
+    assert cable_outlet_cluster.write_attributes.call_args_list[0][0][0] == {
+        "pilot_wire_mode": 0
+    }
+
+    cable_outlet_cluster.write_attributes.reset_mock()
+
+    await entity.async_set_hvac_mode("off")
+    await zha_gateway.async_block_till_done()
+
+    assert cable_outlet_cluster.write_attributes.await_count == 1
+    assert cable_outlet_cluster.write_attributes.call_args_list[0][0][0] == {
+        "pilot_wire_mode": 5
+    }
+
+    cable_outlet_cluster.write_attributes.reset_mock()
+
+
+async def test_legrand_pilot_wire_mode(zha_gateway: Gateway) -> None:
+    """Test setting preset from trv for zonnsmart trv."""
+
+    zigpy_device = create_mock_zigpy_device(
+        zha_gateway,
+        LEGRAND_CABLE_OUTLET,
+        manufacturer=" Legrand",
+        model=" Cable outlet",
+    )
+    device_legrand_cable_outlet_legrand = await join_zigpy_device(
+        zha_gateway, zigpy_device
+    )
+    cable_outlet_cluster = device_legrand_cable_outlet_legrand.device.endpoints[
+        1
+    ].legrand_cable_outlet_cluster
+
+    entity: PlatformEntity = get_entity(
+        device_legrand_cable_outlet_legrand,
+        platform=Platform.CLIMATE,
+    )
+
+    await send_attributes_report(
+        zha_gateway, cable_outlet_cluster, {"pilot_wire_mode": 0}
+    )
+    assert entity.state[ATTR_PRESET_MODE] == "comfort"
+    assert entity.state[ATTR_HVAC_MODE] == "heat"
+
+    await send_attributes_report(
+        zha_gateway, cable_outlet_cluster, {"pilot_wire_mode": 1}
+    )
+    assert entity.state[ATTR_PRESET_MODE] == "comfort_minus_1"
+    assert entity.state[ATTR_HVAC_MODE] == "heat"
+
+    await send_attributes_report(
+        zha_gateway, cable_outlet_cluster, {"pilot_wire_mode": 2}
+    )
+    assert entity.state[ATTR_PRESET_MODE] == "comfort_minus_2"
+    assert entity.state[ATTR_HVAC_MODE] == "heat"
+
+    await send_attributes_report(
+        zha_gateway, cable_outlet_cluster, {"pilot_wire_mode": 3}
+    )
+    assert entity.state[ATTR_PRESET_MODE] == "eco"
+    assert entity.state[ATTR_HVAC_MODE] == "heat"
+
+    await send_attributes_report(
+        zha_gateway, cable_outlet_cluster, {"pilot_wire_mode": 4}
+    )
+    assert entity.state[ATTR_PRESET_MODE] == "frost_protection"
+    assert entity.state[ATTR_HVAC_MODE] == "heat"
+
+    await send_attributes_report(
+        zha_gateway, cable_outlet_cluster, {"pilot_wire_mode": 5}
+    )
+    assert entity.state[ATTR_PRESET_MODE] is None
+    assert entity.state[ATTR_HVAC_MODE] == "off"
